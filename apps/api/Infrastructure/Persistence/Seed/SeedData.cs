@@ -1,3 +1,5 @@
+using System.Data.Common;
+using System.Net.Sockets;
 using BolaSocial.Api.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,67 +13,75 @@ public static class SeedData
     {
         using var scope = services.CreateScope();
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("SeedData");
-        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await context.Database.MigrateAsync(cancellationToken);
 
-        if (await context.Users.AnyAsync(cancellationToken))
+        try
         {
-            logger.LogInformation("Seed skipped; users already exist.");
-            return;
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await context.Database.MigrateAsync(cancellationToken);
+
+            if (await context.Users.AnyAsync(cancellationToken))
+            {
+                logger.LogInformation("Seed skipped; users already exist.");
+                return;
+            }
+
+            var now = DateTime.UtcNow;
+            var gm = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = "gm@bolasocial.gg",
+                PasswordHash = "SEED_HASH",
+                Nickname = "GM",
+                Role = Roles.GameMaster,
+                CreatedAt = now
+            };
+
+            var azul = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = "azul@bolasocial.gg",
+                PasswordHash = "SEED_HASH",
+                Nickname = "JogadorAzul",
+                Role = Roles.User,
+                CreatedAt = now
+            };
+
+            var rosa = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = "rosa@bolasocial.gg",
+                PasswordHash = "SEED_HASH",
+                Nickname = "JogadorRosa",
+                Role = Roles.User,
+                CreatedAt = now
+            };
+
+            context.Users.AddRange(gm, azul, rosa);
+
+            var azulTeam = CreateTeam(azul.Id, "Azul FC");
+            var rosaTeam = CreateTeam(rosa.Id, "Rosa United");
+
+            context.Teams.AddRange(azulTeam.Team, rosaTeam.Team);
+            context.Players.AddRange(azulTeam.Players);
+            context.Players.AddRange(rosaTeam.Players);
+
+            context.Rankings.AddRange(
+                new Ranking { TeamId = azulTeam.Team.Id, Mmr = 1000, Wins = 0, Losses = 0, Draws = 0, Streak = 0 },
+                new Ranking { TeamId = rosaTeam.Team.Id, Mmr = 1000, Wins = 0, Losses = 0, Draws = 0, Streak = 0 }
+            );
+
+            context.ShopItems.AddRange(
+                new ShopItem { Id = Guid.NewGuid(), Kind = "kit", Price = 500, PayloadJson = "{\"color\":\"#2563eb\"}" },
+                new ShopItem { Id = Guid.NewGuid(), Kind = "badge", Price = 750, PayloadJson = "{\"icon\":\"star\"}" }
+            );
+
+            await context.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Seed completed.");
         }
-
-        var now = DateTime.UtcNow;
-        var gm = new User
+        catch (Exception ex) when (IsDatabaseUnavailable(ex))
         {
-            Id = Guid.NewGuid(),
-            Email = "gm@bolasocial.gg",
-            PasswordHash = "SEED_HASH",
-            Nickname = "GM",
-            Role = Roles.GameMaster,
-            CreatedAt = now
-        };
-
-        var azul = new User
-        {
-            Id = Guid.NewGuid(),
-            Email = "azul@bolasocial.gg",
-            PasswordHash = "SEED_HASH",
-            Nickname = "JogadorAzul",
-            Role = Roles.User,
-            CreatedAt = now
-        };
-
-        var rosa = new User
-        {
-            Id = Guid.NewGuid(),
-            Email = "rosa@bolasocial.gg",
-            PasswordHash = "SEED_HASH",
-            Nickname = "JogadorRosa",
-            Role = Roles.User,
-            CreatedAt = now
-        };
-
-        context.Users.AddRange(gm, azul, rosa);
-
-        var azulTeam = CreateTeam(azul.Id, "Azul FC");
-        var rosaTeam = CreateTeam(rosa.Id, "Rosa United");
-
-        context.Teams.AddRange(azulTeam.Team, rosaTeam.Team);
-        context.Players.AddRange(azulTeam.Players);
-        context.Players.AddRange(rosaTeam.Players);
-
-        context.Rankings.AddRange(
-            new Ranking { TeamId = azulTeam.Team.Id, Mmr = 1000, Wins = 0, Losses = 0, Draws = 0, Streak = 0 },
-            new Ranking { TeamId = rosaTeam.Team.Id, Mmr = 1000, Wins = 0, Losses = 0, Draws = 0, Streak = 0 }
-        );
-
-        context.ShopItems.AddRange(
-            new ShopItem { Id = Guid.NewGuid(), Kind = "kit", Price = 500, PayloadJson = "{\"color\":\"#2563eb\"}" },
-            new ShopItem { Id = Guid.NewGuid(), Kind = "badge", Price = 750, PayloadJson = "{\"icon\":\"star\"}" }
-        );
-
-        await context.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Seed completed.");
+            logger.LogWarning(ex, "Skipping database seed because the database is unavailable.");
+        }
     }
 
     private static (Team Team, List<Player> Players) CreateTeam(Guid userId, string name)
@@ -108,5 +118,10 @@ public static class SeedData
         }).ToList();
 
         return (team, players);
+    }
+
+    private static bool IsDatabaseUnavailable(Exception ex)
+    {
+        return ex is DbException || ex.GetBaseException() is SocketException;
     }
 }

@@ -1,0 +1,14 @@
+node_modules/
+.pnpm-store/
+.next/
+dist/
+.env
+.env.*
+.DS_Store
+bin/
+obj/
+*.user
+*.swp
+coverage/
+logs/
+/tmp

@@ -1,0 +1,13 @@
+{
+  "name": "bolasocial-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter @bolasocial/web dev",
+    "dev:api": "dotnet run --project apps/api/BolaSocial.Api.csproj",
+    "dev:all": "concurrently \"pnpm dev:web\" \"pnpm dev:api\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

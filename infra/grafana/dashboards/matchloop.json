@@ -1,0 +1,25 @@
+{
+  "title": "BolaSocial Match Loop",
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Tempo por Tick",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(matchloop_tick_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Inputs por Segundo",
+      "targets": [
+        {
+          "expr": "sum(rate(matchloop_inputs_total[1m]))",
+          "legendFormat": "inputs"
+        }
+      ]
+    }
+  ]
+}

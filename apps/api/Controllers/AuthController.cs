@@ -49,7 +49,7 @@ public sealed class AuthController : ControllerBase
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        return await Login(new LoginRequest { Email = request.Email, Password = request.Password });
+        return await Login(new LoginRequest(request.Email, request.Password));
     }
 
     [HttpPost("login")]

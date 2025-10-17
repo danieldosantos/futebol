@@ -11,12 +11,18 @@ public static class SeedData
 {
     public static async Task EnsureSeedAsync(IServiceProvider services, CancellationToken cancellationToken = default)
     {
-        using var scope = services.CreateScope();
+        await using var scope = services.CreateAsyncScope();
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("SeedData");
 
         try
         {
             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            if (!await WaitForDatabaseAsync(context, logger, cancellationToken))
+            {
+                return;
+            }
+
             await context.Database.MigrateAsync(cancellationToken);
 
             if (await context.Users.AnyAsync(cancellationToken))
@@ -123,5 +129,42 @@ public static class SeedData
     private static bool IsDatabaseUnavailable(Exception ex)
     {
         return ex is DbException || ex.GetBaseException() is SocketException;
+    }
+
+    private static async Task<bool> WaitForDatabaseAsync(AppDbContext context, ILogger logger, CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 3;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                if (await context.Database.CanConnectAsync(cancellationToken))
+                {
+                    return true;
+                }
+
+                logger.LogWarning(
+                    "Database unavailable when attempting to seed (attempt {Attempt}/{MaxAttempts}).",
+                    attempt,
+                    maxAttempts);
+            }
+            catch (Exception ex) when (IsDatabaseUnavailable(ex))
+            {
+                logger.LogWarning(
+                    "Database unavailable when attempting to seed (attempt {Attempt}/{MaxAttempts}).",
+                    attempt,
+                    maxAttempts);
+            }
+
+            if (attempt < maxAttempts)
+            {
+                var delaySeconds = (int)Math.Pow(2, attempt);
+                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
+            }
+        }
+
+        logger.LogWarning("Skipping database seed because the database is unavailable.");
+        return false;
     }
 }
